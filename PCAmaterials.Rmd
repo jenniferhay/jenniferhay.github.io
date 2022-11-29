@@ -1,0 +1,398 @@
+---
+title: "PCA Workshop"
+author: "Jen Hay and Joshua Wilson Black"
+date: "30/11/2022"
+output:
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preamble
+
+This workshop is based closely on this manuscript and supplementary materials:
+
+[Link to manuscript](https://drive.google.com/file/d/11iLIxGBS7iJTXtWm50vmq7fIngO4zZcc/view?usp=share_link)
+
+Some of the code we will be using comes from the supplementary materials from that paper. So if you are keen to look over that, this is where to look:
+
+[Link to supplementary materials](https://joshuawilsonblack.github.io/PCA_method_supplementary/PCA_method_supplementary.html)
+
+
+
+
+We will use the following packages:
+
+``` {r, message=FALSE}
+# We're working in the tidyverse 'dialect'.
+library(tidyverse)
+
+# Used for plots.
+library(ggrepel)
+library(scales)
+library(glue)
+
+# Factoextra used for PCA visualisation
+
+library(factoextra)
+
+# nzilbb.vowels used to share some of the data and provide some useful functions.
+# Install via github using following two lines.
+# Note, once you've installed once, you can comment out these two lines for future knits!
+
+library(remotes)
+remotes::install_github('https://github.com/nzilbb/nzilbb_vowels')
+
+# load up the library, post-installation
+library(nzilbb.vowels)
+
+# Keep track of your environment
+library(here)
+
+```
+
+The following is the details of the R installation and environment used to knit this markdown:
+
+``` {r}
+sessionInfo()
+```
+
+
+
+
+# Māori attitude and exposure analysis (Hashimoto)
+
+Here is our first data-set. 
+Note, the particular details of the columns aren't important, so I'm gonna leave this a bit vague!
+
+```{r}
+quest = read.csv("hashimoto.csv", T)
+```
+
+This data is [based on data from this dissertation](https://ir.canterbury.ac.nz/handle/10092/16634)
+The survey is in the appendix. Note that due to restrictions on data-sharing, the data you are working with has had random noise added to the data-frame.
+
+Each row contains one speaker. The columns represent their answer to a set of questions about exposure and attitudes to Māori English.  
+
+Our ultimate goal is to understand patterns of covariation in the answers, and reduce dimensionality so that we can assign the participants just one or two 'scores', that we can use in other models to predict pronunication patterns of Māori loanwords.
+
+## Get your data into shape.
+
+Take a look at the data. You'll see it contains a speaker ID, and the answers to the questions.
+
+In order to conduct PCA, we need to select out only the survey response columns. This involves getting rid of anything that shouldn't be in the PCA. 
+
+In this case, it is just the column with the speaker ID in that we have to remove.
+
+```{r}
+quest.dat = quest %>% select(-speaker)
+```
+
+We also need to check that our columns are all numeric.
+
+```{r}
+quest.dat = quest.dat %>% mutate(across(where(is.integer), as.numeric))
+```
+
+## Conduct PCA
+
+We conduct a simple PCA.  The 'TRUE' scales all of the variables to the same scale, which should be your default setting.
+
+``` {r}
+quest_pca <- quest.dat %>%
+  prcomp(scale = TRUE)
+```
+
+It is common to look at a screeplot to determine how many PCs to interpret (but we'll provide another approach later in this document).
+
+```{r}
+fviz_screeplot(quest_pca)
+```
+
+
+In this case, PC1 explains by far the most variance, but there are 3 PCs that seem to be doing something before the 'elbow' where the curve flattens out.
+
+PCA generates 'loadings', which tell us how the original 
+variables relate to the PCs and 'scores' which situate each observation
+with respect to the PCs. We can access these from the output of `prcomp`
+using `$rotation` for the loadings and `$x` for the scores. Here are our loadings.
+
+``` {r}
+quest_pca$rotation
+```
+
+One way of interpreting the loadings is to inspect 
+contribution plots. These can be carried out using the `pca_contrib_plot` 
+function from `nzilbb.vowels`.
+
+``` {r}
+pca_contrib_plot(quest_pca, pc_no = 1, cutoff = NULL)
+```
+
+
+This shows the _contribution_ of each variable to the PC, measured as a
+percentage. We indicate whether the underlying loading is negative or positive by use of either a '+' or '-' and by colour. This plot makes the relative magnitude of different variables very clear.
+
+We can plot the same plot with a 'cut off' value. This is a method which is used sometimes when deciding which variables are to be interpreted (we'll suggest a better method below). 
+
+``` {r}
+pca_contrib_plot(quest_pca, pc_no=1, cutoff=50)
+
+```
+
+``` {r}
+pca_contrib_plot(quest_pca, pc_no = 2, cutoff = 50)
+```
+
+``` {r}
+pca_contrib_plot(quest_pca, pc_no = 3, cutoff = 50L)
+```
+
+We can also plot the original variables 
+within the space defined by any two of the PCs. The natural choice is to use the first two principle components. For this we use the function `fviz_pca_var`
+from `factoextra`.
+
+``` {r}
+fviz_pca_var(
+  quest_pca,
+  # top 10 variables by contribution to the PCs plotted
+  select.var = list(contrib = 15),
+  repel = TRUE # attempt to prevent label overlap
+)
+```
+
+The argument 'axes' can be used to select other PCs apart from the first two. 
+
+``` {r}
+fviz_pca_var(
+  quest_pca,
+  axes = c(3,4),
+  # top 10 variables by contribution to the PCs plotted
+  select.var = list(contrib = 15),
+  repel = TRUE # attempt to prevent label overlap
+)
+```
+
+Individual speakers can also be plotted in the space of the first two PCs (or, indeed
+any two PCs we select. We can do this using the function `fviz_pca_ind` 
+from `factoextra`. This may be useful for interpretation
+
+``` {r}
+fviz_pca_ind(
+  quest_pca,
+  repel=TRUE
+)
+```
+
+
+For this dataset, we are interested in getting the scores for each speaker in the dataset, so we can use them to predict their pronunication patterns.
+We therefore combine the results of the PCA back to the original dataset, and select out the key PCs for further analysis.
+
+```{r}
+questwithPCA = cbind(quest, quest_pca$x)
+speakerPCs = questwithPCA %>% select(speaker, PC1, PC2, PC3)
+```
+
+Now we could use PC1, PC2 and PC3 to predict the results of the pronunciation task (in a different dataframe).
+
+But first.... should we?
+
+Before proceeding with reporting PCA, we recommend considering three questions.
+
+## Is PCA Appropriate?
+
+According to Wilson Black et al, the first question to ask concerning a dataset which we intend to apply PCA to
+is, straightforwardly, "is PCA appropriate?". This is particularly important given that PCA will _always_ find relationships between variables. It is important to be able to determine whether these relationships represent genuine
+phenomena or whether they are merely the result of randomness in the data.
+
+For this question,  we will just look at the raw count of significant correlations, comparing them in our real data and in 100 permuted versions of the dataset.
+
+Here we use the function `correlation_test` from the `nzilbb.vowels` package.
+
+
+``` {r, cache = TRUE}
+quest_cor_test <- correlation_test(
+  quest.dat,
+  n = 100,
+  cor.method = "pearson"
+)
+```
+.
+``` {r}
+summary(
+  quest_cor_test,
+  alpha = 0.05,
+  n_cors = 5 # Increase this to see more pairwise correlations.
+)
+```
+There are some very strong pairwise correlations, between predictable things.
+
+We can plot the correlation test in two ways using `nzilbb.vowels`. First, we plot the _count_ of significant correlations.
+
+``` {r}
+sig_cor_plot <- plot_correlation_counts(quest_cor_test, half_violin = TRUE)
+sig_cor_plot
+```
+
+The figure presents the count of significant correlations
+in the original data as a red dot, and the distribution of counts of significant
+correlations as a blue violin. The dot representing the real data is much higher than the null distribution.
+
+We can also look at the magnitude of correlations across our variables.
+``` {r correlation-check-2, fig.cap = "Magnitude of correlations in original and permuted data."}
+mag_cor_plot <- plot_correlation_magnitudes(quest_cor_test)
+mag_cor_plot
+```
+From the above plots, we see that we have non-random structure in our
+correlations, both in terms of magnitude and statistical significance. **This**
+**gives us good reason to proceed with PCA.** If we could not easily distinguish
+our data from the distribution of permuted data sets, we would not be in a
+position to apply PCA.
+
+
+## How Many PCs?
+
+A standard way to do this is to look at a screeplot (shown earlier in this Rmarkdown), but following recent developments in biology, we recommend using bootstrap and permutation to assess which PCs are sitting above chance.
+
+The function `pca_test` from `nzilbb.vowels` runs a parallel bootstrap and
+permutation test to see which PCs are explaining the data safely above random.  This is an alternative for just looking for steep drops in scree plots,
+
+
+``` {r, cache = TRUE}
+
+
+quest_test <- pca_test(
+  quest.dat, 
+  n = 1000,
+  variance_confint = 0.95,
+  loadings_confint = 0.9
+)
+```
+
+
+
+
+
+We can visualise the test results for variance explained using 
+`plot_variance_explained` from `nzilbb.vowels`:
+
+``` {r}
+plot_variance_explained(quest_test)
+```
+
+
+According to the summary above, PCs 1-3 are significant, in the sense that they explain more variance than attained in 95% of the permuted analyses. 
+
+We note that the confidence bands for
+PC2 and PC3 overlap. Wilson Black et al. say this is worrying because in situations in which two PCs  explain the same, or nearly the same, variance, they become very unstable. There's a recommendation for plotting the loadings of such PCs, which I implement below.
+
+The information about the confidence intervals can be extracted from the `pca_test` object, for
+variance explained as a percentage, as follows:
+``` {r}
+quest_test$variance %>% 
+  filter(sig_PC) %>% 
+  select(
+    PC, variance_explained, low_confint_var, high_confint_var, 
+    mean_confint_var, sd_confint_var
+  ) %>% 
+  # Express as percentage
+  mutate(across(.cols = !PC, .fns = ~ .x * 100))
+```
+
+
+**Recommendation from the paper:** report on each PC whose values appear as significantly
+greater than expected from the null distribution. This could be in supplementary material, or in the main body text. Also report, either visually or in a table, the mean, standard deviation and confidence intervals on the variance explained by each PC.
+
+
+
+
+## Interpretation: Which variables?
+
+We now look at interpreting our PCs. 
+
+We use permutation and bootstrapping to generate a 
+null distribution and confidence bands for the index loadings for each PC.
+Vieira suggests that the standard 0.05 alpha value, and the corresponding use of 95% confidence intervals, is too conservative when using index loadings. So, by default, the `pca_test` function uses 90% confidence intervals. The recommendation from Wilson-Black et al is to only interpret loadings where the confidence interval falls outside the null distribution.
+
+We plot the index loadings for the first PC using the `plot_loadings` function:
+``` {r}
+pc1_loadings_plot_uf <- plot_loadings(quest_test, pc_no=1, filter_boots = FALSE)
+pc1_loadings_plot_uf
+```
+
+Just as in the plot of variance explained, this plot has both a null distribution and confidence intervals. The actual values from our PCA analysis are presented by either a black plus or minus, indicating the sign of the loading. If a black minus or plus is outside of the interval for the null distribution, then it is 'significant'. The red bars indicate the confidence intervals for the index loading.  We can safely interpret everything from Ag and above.
+
+We now look at PC2, PC3. Here we filter our bootstrapped analyses because 
+the confidence bands for the variance explained by PC2 and PC3 
+overlap.  
+``` {r}
+# Generate filtered plot 
+pc2_loadings_plot_f <- plot_loadings(quest_test, pc_no=2, filter_boots = TRUE)
+pc2_loadings_plot_f
+
+
+pc3_loadings_plot_f <- plot_loadings(quest_test, pc_no=3, filter_boots = TRUE)
+pc3_loadings_plot_f
+
+
+
+```
+In this data, we can reject PC3 as being too close to random chance.  PC2 is much more marginal than PC1, and driven by just a few questions in the C set. This way of selecting what to interpret is more conservative than the 50 percent cutoff we applied earlier.
+
+From here, we can now proceed with using PC1 and PC2 as potential predictors in our analysis of the pronunciation of Māori loanwords.
+
+We have reduced dimensionality in our dependent variables.
+
+
+
+
+# Your turn
+
+Here are three more data-sets. We will hopefully talk about all of these during the workshop - the first on day one, and the second and third on day two. For each one, complete a PCA analysis. I suggest you go back to the beginning of the example PCA analysis. Copy the steps into the new  section, and adjust so it operates on the new data-set. 
+
+
+## The pronunication of dis/mis
+
+From manuscript in prep.
+
+Each row is an observation of a word beginning with dis/mis. Some are prefixes, some are non-prefixes. The first column is a token ID number. In the other columns, various acoustic measures relating to the onset, vowel and /s/, have been taken.  These have been normalized within gender/corpus (multiple dialects are represented).
+
+```{r}
+dismis.dat = read.csv("dismis.csv",T)
+```
+
+Our ultimate goal is to understand which acoustic parameters tend to cluster together, and then see whether these principle components can be predicted by whether the dis/mis is a prefix or not. We are reducing dimensionality in the dependent variables in our overall study.
+
+
+
+
+## Across speaker vowel variation
+
+The data is from [this paper](https://drive.google.com/file/d/11iLIxGBS7iJTXtWm50vmq7fIngO4zZcc/view?usp=share_link)
+
+This contains speaker intercepts for a set of monophthongs. Each row is a speaker. Each speaker has a column for F1 and F2 of each monophthong. The values are intercepts from GAMMs fit to normalized vowel formants.  By using intercepts from GAMMs fit to normalized vowels, we are attempting to control for known influences of covariation such as vocal tract length (through normalization), age, gender, and speech rate (through the intercepts).
+
+Our ultimate goal is to understand whether vowel productions pattern together systematically across speakers.  For example, if a speaker is a leader of one sound change, does this imply they will also be a leader of several others?
+
+```{r}
+
+vowelsacross.dat = read.csv("onze_ints.csv", T)
+
+```
+
+## Within speaker vowel variation
+
+From manuscript under review.
+
+Each row is a 60s interval of speech taken from a speaker's monologue. Each column is the mean formant value of that interval for a particular vowel, normalized within speaker. Some cells contain imputed data.  The mean amplitude of the interval is also provided.
+
+```{r}
+
+vowelswithin.dat = read.csv("ampdata.csv", T)
+
+```
+
+Our ultimate goal is to understand whether vowels covary over the course of a monologue. In particular, we are interested in whether there are any patterns of covariation that are linked to variation in amplitude.
