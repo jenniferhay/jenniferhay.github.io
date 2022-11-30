@@ -158,7 +158,7 @@ from `factoextra`.
 ``` {r}
 fviz_pca_var(
   quest_pca,
-  # top 10 variables by contribution to the PCs plotted
+  # top 15 variables by contribution to the PCs plotted
   select.var = list(contrib = 15),
   repel = TRUE # attempt to prevent label overlap
 )
@@ -170,7 +170,7 @@ The argument 'axes' can be used to select other PCs apart from the first two.
 fviz_pca_var(
   quest_pca,
   axes = c(3,4),
-  # top 10 variables by contribution to the PCs plotted
+  # top 15 variables by contribution to the PCs plotted
   select.var = list(contrib = 15),
   repel = TRUE # attempt to prevent label overlap
 )
@@ -315,9 +315,9 @@ We now look at interpreting our PCs.
 
 We use permutation and bootstrapping to generate a 
 null distribution and confidence bands for the index loadings for each PC.
-Vieira suggests that the standard 0.05 alpha value, and the corresponding use of 95% confidence intervals, is too conservative when using index loadings. So, by default, the `pca_test` function uses 90% confidence intervals. The recommendation from Wilson-Black et al is to only interpret loadings where the confidence interval falls outside the null distribution.
+Vieira suggests that the standard 0.05 alpha value, and the corresponding use of 95% confidence intervals, is too conservative when using index loadings. So, by default, the `pca_test` function uses 90% confidence intervals. The recommendation from Wilson Black et al is to only interpret loadings where the confidence interval falls outside the null distribution.
 
-We plot the index loadings for the first PC using the `plot_loadings` function:
+We plot the loadings for the first PC using the `plot_loadings` function:
 ``` {r}
 pc1_loadings_plot_uf <- plot_loadings(quest_test, pc_no=1, filter_boots = FALSE)
 pc1_loadings_plot_uf
@@ -340,6 +340,7 @@ pc3_loadings_plot_f
 
 
 ```
+
 In this data, we can reject PC3 as being too close to random chance.  PC2 is much more marginal than PC1, and driven by just a few questions in the C set. This way of selecting what to interpret is more conservative than the 50 percent cutoff we applied earlier.
 
 From here, we can now proceed with using PC1 and PC2 as potential predictors in our analysis of the pronunciation of Māori loanwords.
@@ -361,7 +362,7 @@ From manuscript in prep.
 Each row is an observation of a word beginning with dis/mis. Some are prefixes, some are non-prefixes. The first column is a token ID number. In the other columns, various acoustic measures relating to the onset, vowel and /s/, have been taken.  These have been normalized within gender/corpus (multiple dialects are represented).
 
 ```{r}
-dismis.dat = read.csv("dismis.csv",T)
+dismis = read.csv("dismis.csv",T)
 ```
 
 Our ultimate goal is to understand which acoustic parameters tend to cluster together, and then see whether these principle components can be predicted by whether the dis/mis is a prefix or not. We are reducing dimensionality in the dependent variables in our overall study.
@@ -379,7 +380,7 @@ Our ultimate goal is to understand whether vowel productions pattern together sy
 
 ```{r}
 
-vowelsacross.dat = read.csv("onze_ints.csv", T)
+vowelsacross = read.csv("onze_ints.csv", T)
 
 ```
 
@@ -391,7 +392,7 @@ Each row is a 60s interval of speech taken from a speaker's monologue. Each colu
 
 ```{r}
 
-vowelswithin.dat = read.csv("ampdata.csv", T)
+vowelswithin = read.csv("ampdata.csv", T)
 
 ```
 
